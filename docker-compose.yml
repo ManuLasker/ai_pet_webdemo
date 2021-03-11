@@ -1,0 +1,34 @@
+services:
+  ai-pet-webapp:
+    image: manu/ai-pet-webapp
+    build:
+      context: .
+    volumes:
+      - type: bind
+        source: ./src
+        target: /opt/src
+    environment: 
+      - DEBUG=True
+      - REDIS_HOST=redis
+    ports:
+      - 80:8000
+    entrypoint:
+      - uvicorn
+      - wsgi:app
+      - --reload
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    links:
+      - redis
+    networks:
+      - ai-pet-webapp-network
+
+  redis:
+    image: redis
+    networks:
+      - ai-pet-webapp-network
+
+networks:
+  ai-pet-webapp-network:
