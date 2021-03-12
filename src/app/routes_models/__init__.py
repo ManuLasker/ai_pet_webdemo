@@ -1,1 +1,1 @@
-from ..routes_models.models import cacheRequest
+from ..routes_models.models import cacheImageRequest, cacheCoordinatesPositioningRequest
