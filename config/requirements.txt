@@ -25,6 +25,7 @@ Jinja2==2.11.3
 MarkupSafe==1.1.1
 orjson==3.5.1
 paramiko==2.7.1
+Pillow==8.1.2
 prettytable==0.7.2
 promise==2.3
 pydantic==1.8.1
