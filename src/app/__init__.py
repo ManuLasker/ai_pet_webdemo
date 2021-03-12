@@ -2,6 +2,7 @@ from redis import Redis
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from app.config import logger
 from app.config.variables import (DEBUG, REDIS_HOST,
                                   TITLE, DESCRIPTION)
 
