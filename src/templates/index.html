@@ -16,17 +16,19 @@
     <p>This demo is used to test the process using user <b>feedback</b></p>
     <section>
         <div>
-            {% set canvasIds=['sourceImage', 'targetImage'] %}
-            {% for id in  canvasIds %}
-                {% with id=id %}
+            {% set canvasConfigs={'sourceImage': 'Source Image',
+                                'targetImage': 'Target Image'} %}
+            {% for id, name in canvasConfigs.items() %}
+                {% with id=id, name=name%}
                     {% include "draw.html" %}
                 {% endwith %}
             {% endfor %}
         </div>
         <div>
-            {% set canvasIds=['maskImage', 'blendImage'] %}
-            {% for id in canvasIds %}
-                {% with id=id %}
+            {% set canvasConfigs={'maskImage': 'Mask Image',
+                    'blendImage': 'Blend Image'} %}
+            {% for id, name in canvasConfigs.items() %}
+                {% with id=id, name=name%}
                     {% include "draw.html" %}
                 {% endwith %}
             {% endfor %}
@@ -38,9 +40,9 @@
                 'predictMask':'Predict Mask', 'blendImages':'Blend Images'} %}
     {% for id, name in buttonConfigs.items() %}
         {% if 'upload' in id %}
-            <input type="file" id={{id}} onchange="buttonOnChange(this)" accept="image/*" value={{ name }}></input>
+            <input type="file" id={{id}} onchange="buttonOnChange(this)" accept="image/*"></input>
         {% else %}
-            <input type="button" id={{id}} onclick="buttonOnClick(this)" value={{ name }}></input>
+            <input type="button" id={{id}} onclick="buttonOnClick(this)" value={{name}}></input>
         {% endif %}
     {% endfor %}
     </section>
