@@ -23,6 +23,8 @@ ipython-genutils==0.2.0
 itsdangerous==1.1.0
 Jinja2==2.11.3
 MarkupSafe==1.1.1
+numpy==1.20.1
+opencv-python==4.5.1.48
 orjson==3.5.1
 paramiko==2.7.1
 Pillow==8.1.2
@@ -53,6 +55,10 @@ starlette==0.13.6
 table-logger==0.3.6
 terminado==0.8.3
 testpath==0.4.4
+--find-links https://download.pytorch.org/whl/torch_stable.html
+torch==1.8.0+cpu 
+torchvision==0.9.0+cpu 
+olefile==0.46
 traitlets==4.3.3
 typing-extensions==3.7.4.3
 ujson==3.2.0

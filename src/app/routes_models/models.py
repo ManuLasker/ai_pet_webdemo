@@ -7,3 +7,7 @@ class cacheImageRequest(BaseModel):
     
 class cacheCoordinatesPositioningRequest(BaseModel):
     box_xyxy_coords: List[float]
+    name_coords: str
+
+class grabCutRequest(BaseModel):
+    mask_helper: str
