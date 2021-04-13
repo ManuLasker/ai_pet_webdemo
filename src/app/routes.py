@@ -52,17 +52,24 @@ def mask_grabcut_wm_helper_route(body: grabCutRequest, db:Redis = Depends(get_re
     # Extract mask helper from body request
     base64_format = body.mask_helper.split(',')[0]
     # Convert base64 image encode to pil image
-    mask_helper = body.mask_helper
+    mask_helper = body.mask_helper 
     # Load source image in base64
     src_image = json.loads(db.get('sourceImage'))
-    # Load mask done using grab cut square helper if there is one
-    mask_square_helper = json.loads(db.get('squareMaskOriginal'))
     # Get sizes
     original_size = json.loads(db.get('sourceImage''_original_size'))
     resized_size = json.loads(db.get('sourceImage''_new_size'))
     # apply grab cut with mask helper algorithm
-    
-    return {'status': 'ok'}
+    mask_b64, mask_b64_resized, preview_b64_resized = I.get_grabcut_by_mask(src_image,
+                                                                            mask_helper,
+                                                                            original_size,
+                                                                            resized_size)
+    # save mask
+    I._base64_to_pil(mask_b64).save('/mask.jpg')
+    # Cache both paint mask
+    db.set('paintMaskOriginal', mask_b64)
+    db.set('paintMaskResized', mask_b64_resized)
+    return {'mask': 'data:image/jpeg;base64'+','+mask_b64_resized,
+            'preview_cut': 'data:image/jpeg;base64'+','+preview_b64_resized}
         
 @app.post('/mask_grabcut_square_helper', description='Apply grabcut algorithm')
 def mask_grabcut_square_helper_route(db:Redis = Depends(get_redis_db)):
@@ -80,7 +87,7 @@ def mask_grabcut_square_helper_route(db:Redis = Depends(get_redis_db)):
                                                                         original_size,
                                                                         resized_size)
     # Cache both square mask
-    db.set('squareMaskOriginal', mask_b64)
-    db.set('squareMaskResized', mask_b64_resized)
+    db.set('squareMaskOriginal', json.dumps(mask_b64))
+    db.set('squareMaskResized', json.dumps(mask_b64_resized))
     return {'mask_rect': 'data:image/jpeg;base64'+','+mask_b64_resized,
             'preview_cut': 'data:image/jpeg;base64'+','+preview_b64_resized}
