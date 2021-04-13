@@ -265,6 +265,8 @@ function draw(action, event, canvasObject, canvas, ctx){
                 }else{
                     var manualMaskHelperURL = tempCanvas.toDataURL()
                     console.log(manualMaskHelperURL)
+                    var img = new Image()
+                    var imgPreview = new Image()
                     fetch('/mask_wm_grabcut_helper', 
                     {
                         method: 'POST',
@@ -273,7 +275,25 @@ function draw(action, event, canvasObject, canvas, ctx){
                         })
                     }).then(response => response.json())
                     .then(response => {
-                        // console.log(response)
+                        console.log(response)
+                        var canvasCut = document.getElementById('grabCutImage')
+                        var ctxCut = canvasCut.getContext('2d')
+                        img.src = response.mask
+                        img.onload = function() {
+                            canvasCut.width = this.width
+                            canvasCut.height = this.height
+                            ctxCut.drawImage(this, 0, 0,
+                                this.width, this.height)
+                        }
+                        // upload image to preview image canvas
+                        var canvasPreview = document.getElementById('previewImage')
+                        var ctxPreview = canvasPreview.getContext('2d')
+                        imgPreview.src = response.preview_cut
+                        imgPreview.onload = function() {
+                            canvasPreview.width = this.width
+                            canvasPreview.height = this.height
+                            ctxPreview.drawImage(this, 0, 0, this.width, this.height)
+                        }
                     })
                 }
 

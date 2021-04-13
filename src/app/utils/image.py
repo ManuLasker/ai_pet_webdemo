@@ -1,7 +1,8 @@
 import torch
 import cv2
+import pickle
 import numpy as np
-import app
+import app as app
 from app.utils.general import scale_coordinates, xyxy2xywh
 from typing import Tuple, Union, overload
 from io import BytesIO
@@ -9,7 +10,7 @@ from base64 import b64decode, b64encode
 from PIL import Image
 from torchvision import transforms as T
 
-def _base64_to_pil(base64_image:str, convert: bool = True) -> Image.Image:
+def _base64_to_pil(base64_image:str, convert_to_mask: bool = False) -> Image.Image:
     """Convert base64 image string to PIL image
     Args:
         base64Image (str): base 64 str image decode
@@ -20,8 +21,10 @@ def _base64_to_pil(base64_image:str, convert: bool = True) -> Image.Image:
     if len(base64_image.split(",")) > 1:
         _, base64_image = base64_image.split(",")
     pil_image = Image.open(BytesIO(b64decode(base64_image)))
-    if pil_image.mode == "RGBA" and convert:
+    if pil_image.mode == "RGBA":
         pil_image = pil_image.convert("RGB")
+    if convert_to_mask:
+        pil_image = pil_image.convert("L")
     return pil_image
 
 def _pil_to_base64(pil_image: Image.Image) -> str:
@@ -60,7 +63,7 @@ def _to_numpy(image: Union[Image.Image, torch.Tensor]) -> np.ndarray:
                              (1, 2, 0))
         return image
     elif isinstance(image, Image.Image):
-        return np.asarray(image)
+        return np.array(image)
 
 def _to_pil(image: Union[torch.Tensor, np.ndarray]) -> Image.Image:
     """Convert tensor Image or numpy array Image to PIL image format
@@ -129,42 +132,74 @@ def apply_grabcut_rect(image: np.ndarray, xywh_box: np.ndarray)->np.ndarray:
     fgdModel = np.zeros((1,65), np.float64)
     # Apply grabcut for init with rect
     cv2.grabCut(image, mask, xywh_box, bgdModel=bgdModel,
-                fgdModel=fgdModel, iterCount=50,
+                fgdModel=fgdModel, iterCount=5,
                 mode=cv2.GC_INIT_WITH_RECT)
     # Cache bgdModel and fgdModel
-    
+    set_model_in_cache(fgdModel=fgdModel, bgdModel=bgdModel, mask=mask)
     # Get mask_grabcut
     mask_grabcut = np.where((mask==2)|(mask==0), 0, 1)
     return inv_preprocess_numpy_image(mask_grabcut)
 
-def apply_grabcut_mask(image: np.ndarray, mask_helper_square:np.ndarray,
+def apply_grabcut_mask(image: np.ndarray,
                        mask_paint:np.ndarray) -> np.ndarray:
     """apply grabcut algorithm in mask mode
     Args:
         image (np.ndarray): numpy image array uint8
-        mask_helper_square (np.ndarray): numpy image array uint8,
-        is the mask from square mode
         mask_paint (np.ndarray): numpy image array uint8,
         is the paint from canvas tool
     Returns:
         np.ndarray: mask
     """
-    pass
+    # Get fgdModel and bgdModel
+    fgdModel, bgdModel, mask_helper_square = get_model_from_cache('fgdModel',
+                                                                  'bgdModel',
+                                                                  'mask').values()
+    # get information from mask_paint to mask_helper_square
+    mask = mask_helper_square.copy()
+    mask[mask_paint == 255] = 1
+    mask[mask_paint == 0] = 0
 
-def get_grabcut_by_mask(base64_image: str, b64mask_square_helper: str, 
-                        new_size: list, old_size: list) -> Tuple[str, str, str]:
+    # Apply grabcut
+    mask, bgdModel, fgdModel = cv2.grabCut(image, mask, None, bgdModel=bgdModel,
+                                           fgdModel=fgdModel, iterCount=5,
+                                           mode=cv2.GC_INIT_WITH_MASK)
+    # Get mask_grabcut
+    mask_grabcut = np.where((mask==2)|(mask==0), 0, 1)
+    return inv_preprocess_numpy_image(mask_grabcut)
+
+def get_grabcut_by_mask(base64_image: str, b64mask_paint:str, new_size: list,
+                        old_size: list) -> Tuple[str, str, str]:
     """get grab cut mask using mask_helper from square method
     Args:
         base64_image (str): base64 image encode
-        b64mask_square_helper (str): base64 mask helper encode
+        b64mask_paint (str): base64 mask paint helper
         new_size (list): original size of the image
         old_size (list): resize size of the new image
     Returns:
         Tuple[str, str, str]: return base64 masks for the original 
         and the resized and the preview
     """
-    pass
-
+    # load to numpy
+    original_numpy_image = _to_numpy(_base64_to_pil(base64_image))
+    # load b64 mask paint to numpy this is in 224x224 we need to resize up
+    mask_paint_helper = _base64_to_pil(b64mask_paint, convert_to_mask=True)
+    mask_paint_helper = _to_numpy(resize_with_pad(mask_paint_helper, new_size))
+    # apply grab cut
+    original_mask_numpy = apply_grabcut_mask(image=original_numpy_image,
+                       mask_paint=mask_paint_helper)
+    # to pil
+    original_mask_pil = _to_pil(original_mask_numpy)
+    # resize pad
+    resized_mask_pil = resize_with_pad(original_mask_pil, old_size)
+    # get preview
+    original_preview_cut = get_preview_cut(original_numpy_image, original_mask_numpy)
+    original_preview_cut = _to_pil(original_preview_cut)
+    resize_preview_cut = resize_with_pad(original_preview_cut, old_size)
+    
+    return (_pil_to_base64(original_mask_pil),
+            _pil_to_base64(resized_mask_pil),
+            _pil_to_base64(resize_preview_cut))
+    
 def get_grabcut_by_rect(base64_image: str, resized_xyxy_box: list, 
                          new_size: list, old_size: list) -> Tuple[str, str, str]:
     """get grab cut mask using rect xyxy dimensions, 
@@ -240,5 +275,22 @@ def get_preview_cut(image:np.ndarray,
     mask = preprocess_numpy_image(mask)[:, :, np.newaxis]
     preview_cut = image * mask
     return inv_preprocess_numpy_image(preview_cut)
-    
-    
+
+def set_model_in_cache(**numpy_arrays_dict):
+    """Cache numpy arrays in a dict
+    """
+    db = list(app.get_redis_db())[0]
+    for key, numpy_array in numpy_arrays_dict.items():
+        # caching numpy arrays models
+        db.set(key, pickle.dumps(numpy_array))
+        
+def get_model_from_cache(*key_names) -> dict:
+    """get models from cache into a dict with the models arrays
+    Returns:
+        dict: dict with the models arrays from redis db
+    """
+    db = list(app.get_redis_db())[0]
+    models = {}
+    for key in key_names:
+        models[key] = pickle.loads(db.get(key))
+    return models
