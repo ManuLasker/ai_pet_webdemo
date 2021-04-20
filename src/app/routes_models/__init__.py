@@ -1,3 +1,3 @@
 from ..routes_models.models import (cacheImageRequest,
                                     cacheCoordinatesPositioningRequest,
-                                    grabCutRequest)
+                                    grabCutRequest, maskModelRequest)

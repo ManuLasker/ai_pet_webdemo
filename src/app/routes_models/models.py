@@ -11,3 +11,9 @@ class cacheCoordinatesPositioningRequest(BaseModel):
 
 class grabCutRequest(BaseModel):
     mask_helper: str
+    
+class maskModelRequest(BaseModel):
+    name_image: str
+    
+class blendModelRequest(BaseModel):
+    naive: bool
