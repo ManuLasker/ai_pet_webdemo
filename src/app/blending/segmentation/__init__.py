@@ -1,0 +1,1 @@
+from app.blending.segmentation.models import Predictor 
