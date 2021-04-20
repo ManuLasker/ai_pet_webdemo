@@ -7,6 +7,9 @@ services:
       - type: bind
         source: ./src
         target: /opt/src
+      - type: bind
+        source: ./models
+        target: /opt/models
     environment: 
       - DEBUG=True
       - REDIS_HOST=redis
