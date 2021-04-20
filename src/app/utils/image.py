@@ -2,12 +2,14 @@ import torch
 import cv2
 import pickle
 import numpy as np
-import app as app
-from app.utils.general import scale_coordinates, xyxy2xywh
+from redis import Redis
+from app.utils.general import *
 from typing import Tuple, Union, overload
 from io import BytesIO
 from base64 import b64decode, b64encode
 from PIL import Image
+from app import Predictor
+from app.blending.utils import *
 from torchvision import transforms as T
 
 def _base64_to_pil(base64_image:str, convert_to_mask: bool = False) -> Image.Image:
@@ -87,7 +89,8 @@ def get_image_base64_shape(base64_image: str) -> tuple:
     return _base64_to_pil(base64_image).size[::-1]
 
 def resize_with_pad(image: Image.Image, new_shape=(224, 224)) -> Image.Image:
-    """Receive a pil Image and resize applying padding
+    """Receive a pil Image and resize applying padding, this method also remove padding,
+    and make the inverse method
     Args:
         image (Image.Image): pil Image
         new_shape (tuple, optional): Shape you want to resize. Defaults to (224, 224).
@@ -95,23 +98,42 @@ def resize_with_pad(image: Image.Image, new_shape=(224, 224)) -> Image.Image:
         Image.Image: pil Image resize
     """
     # ratio
-    old_w, old_h = image.size # PIL image return (W, H)
-    new_h, new_w = new_shape # new_shape (H, W)
+    old_w, old_h = image.size # PIL image return (W, H) up small size
+    new_h, new_w = new_shape # new_shape (H, W) down high size
     r = min(new_h/old_h, new_w/old_w)
     
-    # Get padding
-    new_unpad_h, new_unpad_w = round(old_h * r), round(old_w * r)
-    dh, dw = (new_h - new_unpad_h)/2, (new_w - new_unpad_w)/2
+    # up or down resize
+    if r > 1: 
+        # activate apply resize up inverse eliminating pad
+        up = True
+        r = 1/max(new_h/old_h, new_w/old_w) 
+        # Get pad to Eliminate it
+        new_unpad_h, new_unpad_w = round(new_h * r), round(new_w * r)
+        dh, dw = (old_h - new_unpad_h)/2, (old_w - new_unpad_w)/2
+    else:
+        # is resize down
+        up = False
+        # Get padding
+        new_unpad_h, new_unpad_w = round(old_h * r), round(old_w * r)
+        dh, dw = (new_h - new_unpad_h)/2, (new_w - new_unpad_w)/2
+        
     top, bottom = round(dh - 0.1), round(dh + 0.1)
     left, right = round(dw - 0.1), round(dw + 0.1)
     
-    transform = T.Compose([
-        T.Resize(size=(new_unpad_h, new_unpad_w)),
-        T.Pad(padding=(left, top, right, bottom))
-    ])
-    
+    if up:
+        image = _to_tensor(image) # ch x H x W
+        # delete pad
+        image = image[:, top: bottom + new_unpad_h, left: right + new_unpad_w]
+        image = _to_pil(image) # transform to pil again
+        transform = T.Resize(size=(new_h, new_w))
+    else:
+        transform = T.Compose([
+            T.Resize(size=(new_unpad_h, new_unpad_w)),
+            T.Pad(padding=(left, top, right, bottom))
+        ])
     # resize image
     return transform(image)
+
 
 def apply_grabcut_rect(image: np.ndarray, xywh_box: np.ndarray)->np.ndarray:
     """Apply grabcut algorithm with rect mode
@@ -163,6 +185,7 @@ def apply_grabcut_mask(image: np.ndarray,
     mask, bgdModel, fgdModel = cv2.grabCut(image, mask, None, bgdModel=bgdModel,
                                            fgdModel=fgdModel, iterCount=5,
                                            mode=cv2.GC_INIT_WITH_MASK)
+    
     # Get mask_grabcut
     mask_grabcut = np.where((mask==2)|(mask==0), 0, 1)
     return inv_preprocess_numpy_image(mask_grabcut)
@@ -276,21 +299,97 @@ def get_preview_cut(image:np.ndarray,
     preview_cut = image * mask
     return inv_preprocess_numpy_image(preview_cut)
 
-def set_model_in_cache(**numpy_arrays_dict):
-    """Cache numpy arrays in a dict
-    """
-    db = list(app.get_redis_db())[0]
-    for key, numpy_array in numpy_arrays_dict.items():
-        # caching numpy arrays models
-        db.set(key, pickle.dumps(numpy_array))
-        
-def get_model_from_cache(*key_names) -> dict:
-    """get models from cache into a dict with the models arrays
+def predict_mask_using_model(base64_image: str, new_size: list,
+                             old_size: list) -> Tuple[str, str, str]:
+    """Predict mask using a deep learning trained model
+    Args:
+        base64_image (str): base64 image encode
+        new_size (list): original size of the image
+        old_size (list): resize size of the new image
     Returns:
-        dict: dict with the models arrays from redis db
+        Tuple[str, str]: return base64 masks for the original
+        and the resized and the preview
     """
-    db = list(app.get_redis_db())[0]
-    models = {}
-    for key in key_names:
-        models[key] = pickle.loads(db.get(key))
-    return models
+    # load image
+    original_source_image = _base64_to_pil(base64_image)
+    # resize to 224, 244
+    resized_source_image = resize_with_pad(original_source_image,
+                                           old_size)
+    # tranform to tensor
+    resized_source_tensor = _to_tensor(resized_source_image)
+    # normalize
+    preprocess_source_tensor = normalize_image(resized_source_tensor)
+    # Predict mask
+    mask = Predictor.predict(preprocess_source_tensor.unsqueeze(0)).sigmoid()
+    # postprocess mask for resize image
+    mask[mask > 0.8] = 1
+    mask = mask.round().squeeze(0)
+    # get original size mask image
+    pil_resize_mask = _to_pil(mask)
+    pil_original_mask = resize_with_pad(pil_resize_mask, new_size)
+    # Combine model mask to grabcut algorithm
+    # TODO
+    # get preview image
+    resized_preview_image = resized_source_tensor * mask
+    resized_preview_image = _to_pil(resized_preview_image)
+    # return bas64_image encode original mask, resize mask, and resize preview cut
+    return (_pil_to_base64(pil_original_mask), 
+            _pil_to_base64(pil_resize_mask),
+            _pil_to_base64(resized_preview_image))
+
+def get_bb_from_mask(mask: np.ndarray) -> np.ndarray:
+    """Get bounding box xyxy format from image using mask, this will return
+    the position where the important information from image are
+    Args:
+        mask (np.ndarray): numpy uint8 mask (H x W)
+    Returns:
+        np.ndarray: xyxy dimensions (x0, y0, x1, y1)
+    """
+    # get countours
+    contours, _ = cv2.findContours(image=mask,
+                                   mode=cv2.RETR_TREE,
+                                   method=cv2.CHAIN_APPROX_SIMPLE)
+    contours = sorted(contours, key=cv2.contourArea, reverse=True)
+    # Get bounding box from contours
+    c = contours[0]
+    xywh_source = np.array(cv2.boundingRect(c), dtype=np.int32)
+    return xywh2xyxy(xywh_source)
+
+def get_blending_image(src: str, mask: str,
+                       target: str, dims: list, naive: bool) -> Tuple[str, str]:
+    """Apply blending algorithm to base 64 image encode
+    Args:
+        src (str): base 64 image encode source image
+        mask (str): base 64 image encode mask image, this select the information
+        target (str): base 64 image encode target image
+        dims (list): xyxy list box dimensions where to paste the images
+        naive (bool): specify if naive copy or deep image blending
+    Returns:
+        Tuple[str, str]: original blend image, blend image resize. Both in base64 encode
+    """
+    # Transform all the images into pil images
+    # target images and dimensions are in 224 x 224 the resize version
+    target = _to_tensor(_base64_to_pil(target))
+    xyxy_target = np.array(dims, dtype=np.int32)
+    # load mask and source in numpy
+    source = _to_numpy(_base64_to_pil(src))
+    mask = _to_numpy(_base64_to_pil(mask))
+    # get xyxy dimensions for source using mask
+    xyxy_source = get_bb_from_mask(mask)
+    # extract mask and source information
+    source = source[xyxy_source[1]:xyxy_source[3],
+                    xyxy_source[0]:xyxy_source[2],:]
+    mask = mask[xyxy_source[1]:xyxy_source[3],
+                    xyxy_source[0]:xyxy_source[2]]
+    # transfom to pil again
+    source, mask = _to_pil(source), _to_pil(mask)
+    h, w = get_dimensions_box(xyxy_target)
+    # resize source and mask to fill h, w box dimensions
+    source = resize_with_pad(source, new_shape=(h, w))
+    mask = resize_with_pad(mask, new_shape=(h, w))
+    # begin blend process
+    blend_img = blend(source=_to_tensor(source), mask=_to_tensor(mask),
+          target=target, dims=xyxy_target, naive=naive)
+    # transform to pil 
+    blend_img = _to_pil(blend_img)
+    return 'Nada', _pil_to_base64(blend_img)
