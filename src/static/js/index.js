@@ -44,10 +44,92 @@ function buttonOnClick(buttonObject){
     id = buttonObject.id
     switch (id){
         case 'predictMask':
+            var img = new Image()
+            var imgPreview = new Image()
+            console.log('predict Mask')
+            fetch('/mask_model_prediction',
+                {method: 'POST'}
+            ).then(response => response.json())
+            .then(response => {
+                console.log(response)
+                // upload mask image
+                var canvas = document.getElementById('maskImage')
+                var ctx = canvas.getContext('2d')
+                img.src = response.model_mask
+                img.onload = function() {
+                    canvas.width = this.width
+                    canvas.height = this.height
+                    ctx.drawImage(this, 0, 0, this.width, this.height)
+                }
+
+                // upload image to preview image canvas
+                var canvasPreview = document.getElementById('previewImage')
+                var ctxPreview = canvasPreview.getContext('2d')
+                imgPreview.src = response.preview_cut
+                imgPreview.onload = function() {
+                    canvasPreview.width = this.width
+                    canvasPreview.height = this.height
+                    ctxPreview.drawImage(this, 0, 0, this.width, this.height)
+                }
+            })
             break;
         case 'blendImages':
+            var imgBlendPreview = new Image()
+            fetch('/blend_image',
+            {
+                method: 'POST',
+                body: JSON.stringify({
+                    naive: false
+                })
+            }).then(response => response.json())
+            .then(response => {
+                var canvasPreview = document.getElementById('blendImage')
+                var ctxPreview = canvasPreview.getContext('2d')
+                imgBlendPreview.src = response.blend_preview
+                imgBlendPreview.onload = function() {
+                    canvasPreview.width = this.width
+                    canvasPreview.height = this.height
+                    ctxPreview.drawImage(this, 0, 0, this.width, this.height)
+                }
+            })
             break;
         case 'previewImages':
+            var imgBlendPreview = new Image()
+            fetch('/blend_image',
+            {
+                method: 'POST',
+                body: JSON.stringify({
+                    naive: true
+                })
+            }).then(response => response.json())
+            .then(response => {
+                var canvasPreview = document.getElementById('blendImage')
+                var ctxPreview = canvasPreview.getContext('2d')
+                imgBlendPreview.src = response.blend_preview
+                imgBlendPreview.onload = function() {
+                    canvasPreview.width = this.width
+                    canvasPreview.height = this.height
+                    ctxPreview.drawImage(this, 0, 0, this.width, this.height)
+                }
+            })
+            break;
+        case 'grabcutMask':
+            var imgPreview = new Image()
+            fetch('/get_preview_grabcut',
+            {
+                method: 'GET'
+            }).then(response => response.json())
+            .then(response => {
+                // upload image to preview image canvas
+                var canvasPreview = document.getElementById('previewImage')
+                var ctxPreview = canvasPreview.getContext('2d')
+                imgPreview.src = response.preview_image
+                imgPreview.onload = function() {
+                    canvasPreview.width = this.width
+                    canvasPreview.height = this.height
+                    ctxPreview.drawImage(this, 0, 0, this.width, this.height)
+                }
+            })
             break;
     }
 }
@@ -327,3 +409,25 @@ function draw(action, event, canvasObject, canvas, ctx){
             break;
     }
 }
+
+function get_blend_image(){
+    var imgBlendPreview = new Image()
+    fetch('/get_blend_image', {
+        method: 'GET'
+    }).then(response => response.json())
+    .then(response => {
+        // console.log(response)
+        if (response.blend_preview != null){
+            var canvasPreview = document.getElementById('blendImage')
+            var ctxPreview = canvasPreview.getContext('2d')
+            imgBlendPreview.src = response.blend_preview
+            imgBlendPreview.onload = function() {
+                canvasPreview.width = this.width
+                canvasPreview.height = this.height
+                ctxPreview.drawImage(this, 0, 0, this.width, this.height)
+            }
+        }
+    })
+}
+
+var intervalId = window.setInterval(get_blend_image, 5000);
