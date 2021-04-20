@@ -1,11 +1,19 @@
+import torch
 from redis import Redis
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from app.config import logger
 from app.config.variables import (DEBUG, REDIS_HOST,
-                                  TITLE, DESCRIPTION)
-
+                                  TITLE, DESCRIPTION, MASK_MODEL_PATH)
+from app.blending.segmentation import Predictor
+from app.blending.models import VGG16_Model, MeanShift
+# preconfig models
+model = VGG16_Model()
+del(model)
+# config predictor
+Predictor.set_config(model_path=MASK_MODEL_PATH)
+Predictor.predict(x = torch.randn(1, 3, 224, 224))
 
 app = FastAPI(debug=DEBUG,
               title=TITLE,
