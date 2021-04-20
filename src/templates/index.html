@@ -50,7 +50,7 @@
         {% endfor %}
     </section>
     <section>
-        {% set buttonConfigs = {'grabcutMask': 'Grabcut Mask', 'predictMask':'Predict Mask',
+        {% set buttonConfigs = {'predictMask':'Predict Mask', 'grabcutMask': 'Grabcut Mask',
         'previewImages':'Preview Images', 'blendImages':'Blend Images'} %}
         {% for id, name in  buttonConfigs.items() %}
         <input type="button" id={{id}} onclick="buttonOnClick(this)" value="{{name}}"></input>
