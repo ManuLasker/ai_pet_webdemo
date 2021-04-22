@@ -149,13 +149,13 @@ def execute_blend_process(source_temp: torch.Tensor, mask_temp: torch.Tensor,
         mean_shift = MeanShift().to(device=device)
         
         # define optimizer and loss function
-        optimizer = optim.LBFGS([input_img.requires_grad_()], lr=1.2, max_iter=200)
+        optimizer = optim.LBFGS([input_img.requires_grad_()], lr=1.4, max_iter=200)
         mse_loss = nn.MSELoss().to(device=device)
         
         # Algorithms configuration
         run = [0]
-        num_step = 100
-        w_grad, w_cont, w_tv, w_style = 5e4, 1e1, 1e-6, 0.05
+        num_step = 500
+        w_grad, w_cont, w_tv, w_style = 5e4, 1, 1e-6, 0.05
         configurations = {
             'num_step': num_step,
             'alg config': {
@@ -239,6 +239,8 @@ def blend(source: torch.Tensor, mask: torch.Tensor,
         torch.Tensor: blend image
     """
     mask = mask.unsqueeze(0)
+    mask[mask > 0.4] = 1
+    mask[mask <= 0.4] = 0
     source = source.unsqueeze(0)
     target = target.unsqueeze(0)
     return execute_blend_process(source_temp=source, mask_temp=mask,
