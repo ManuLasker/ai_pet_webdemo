@@ -154,8 +154,8 @@ def execute_blend_process(source_temp: torch.Tensor, mask_temp: torch.Tensor,
         
         # Algorithms configuration
         run = [0]
-        num_step = 1000
-        w_grad, w_cont, w_tv, w_style = 3e4, 2e1, 1e-6, 0.05
+        num_step = 500
+        w_grad, w_cont, w_tv, w_style = 3e4, 3e1, 1e-6, 0.05
         configurations = {
             'num_step': num_step,
             'alg config': {
