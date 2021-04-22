@@ -142,20 +142,20 @@ def execute_blend_process(source_temp: torch.Tensor, mask_temp: torch.Tensor,
     if naive:
         return naive_copy.squeeze(0)
     else:
-       # Get ground truth gradients
+        # Get ground truth gradients
         gt_gradients = torch.stack(get_mixing_gradients(new_image_data,
                                                         device=device), dim=2).squeeze(0)
         vgg16_features = VGG16_Model().to(device=device)
         mean_shift = MeanShift().to(device=device)
         
         # define optimizer and loss function
-        optimizer = optim.LBFGS([input_img.requires_grad_()], lr=1.4, max_iter=200)
+        optimizer = optim.LBFGS([input_img.requires_grad_()], lr=1.2, max_iter=200)
         mse_loss = nn.MSELoss().to(device=device)
         
         # Algorithms configuration
         run = [0]
         num_step = 1000
-        w_grad, w_cont, w_tv, w_style = 1e4, 1e1, 1e-6, 0.05
+        w_grad, w_cont, w_tv, w_style = 3e4, 2e1, 1e-6, 0.05
         configurations = {
             'num_step': num_step,
             'alg config': {
@@ -246,7 +246,6 @@ def blend(source: torch.Tensor, mask: torch.Tensor,
     return execute_blend_process(source_temp=source, mask_temp=mask,
                           target_temp=target, dims=[int(d) for d in dims],
                           device=torch.device('cpu'), naive=naive)
-    
 
 
 
