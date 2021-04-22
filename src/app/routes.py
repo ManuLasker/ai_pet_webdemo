@@ -108,7 +108,6 @@ def predict_mask_model(db: Redis = Depends(get_redis_db)):
     db.set('modelMaskOriginal', json.dumps(mask_b64))
     db.set('modelMaskResized', json.dumps(mask_b64_resized))
     db.set('modelPreviewCut', json.dumps(preview_b64_resized))
-   
     return {'model_mask': 'data:image/jpeg;base64'+','+mask_b64_resized,
             'preview_cut': 'data:image/jpeg;base64'+','+preview_b64_resized}
 
@@ -117,7 +116,8 @@ def blend(body: blendModelRequest, db: Redis = Depends(get_redis_db)):
     # load src image information
     src_image = json.loads(db.get('sourceImage'))
     # load mask image information from grabcut
-    mask_image = json.loads(db.get('paintMaskOriginal'))
+    mask_image = json.loads(db.get('paintMaskOriginal') if db.get('paintMaskOriginal')
+                            is not None else db.get('squareMaskResized'))
     # load target information for the resized version
     # load target image information
     target_image = json.loads(db.get('targetImage''Resized'))
