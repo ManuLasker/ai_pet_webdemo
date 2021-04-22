@@ -117,7 +117,7 @@ def blend(body: blendModelRequest, db: Redis = Depends(get_redis_db)):
     src_image = json.loads(db.get('sourceImage'))
     # load mask image information from grabcut
     mask_image = json.loads(db.get('paintMaskOriginal') if db.get('paintMaskOriginal')
-                            is not None else db.get('squareMaskResized'))
+                            is not None else db.get('squareMaskOriginal'))
     # load target information for the resized version
     # load target image information
     target_image = json.loads(db.get('targetImage''Resized'))
