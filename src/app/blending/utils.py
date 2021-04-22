@@ -190,7 +190,7 @@ def execute_blend_process(source_temp: torch.Tensor, mask_temp: torch.Tensor,
         mean_shift = MeanShift().to(device=device)
         
         # define optimizer and loss function
-        optimizer = optim.LBFGS([input_img.requires_grad_()], lr=1.2, max_iter=200)
+        optimizer = optim.LBFGS([input_img.requires_grad_()], lr=1.2)
         mse_loss = nn.MSELoss().to(device=device)
         
         # Algorithms configuration
@@ -211,20 +211,17 @@ def execute_blend_process(source_temp: torch.Tensor, mask_temp: torch.Tensor,
         style_layers = vgg16_features.style_layers
         content_layers = vgg16_features.content_layers
         # Initialize Early stop
-        early_stop = EarlyStopping(verbose=True, trace_func=print)
+        early_stop = EarlyStopping(delta=0.5, verbose=True, trace_func=print)
+        global loss_
         loss_ = None
         while run[0] < num_step:
-            step_ = 0
             if loss_:
-                loss_ /= step_
                 early_stop(loss_)
             else:
-                loss_ = 0
-            
-            if early_stop.early_stop:
-                break
-            
+                loss_ = 0 
             def closure():
+                # global loss
+                global loss_
                 # zero grad optimizer
                 optimizer.zero_grad()
                 blend_img = (input_img * mask + target * (1 - mask))
@@ -265,17 +262,18 @@ def execute_blend_process(source_temp: torch.Tensor, mask_temp: torch.Tensor,
                     "loss_content": loss_content.item(),
                     "loss_source_style": loss_source_style.item(),
                     "loss_tv": loss_tv.item(),
-                    "loss_total": loss_total.item()
+                    "loss_total": round(loss_total.item(), 2)
                 }
                 pbar.set_postfix(**pbar_stats)
                 pbar.update()
                 # Update run
                 run[0] += 1
                 # Save loss for mean
-                loss_ += loss_total.item()
-                step_ += 1
+                loss_ = loss_total.item()
                 return loss_total
             optimizer.step(closure)
+            if early_stop.early_stop:
+                break
         with torch.no_grad():
             result_img = (input_img * mask + target * (1 - mask))
         return result_img.squeeze(0)
