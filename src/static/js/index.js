@@ -91,6 +91,7 @@ function buttonOnClick(buttonObject){
                     canvasPreview.height = this.height
                     ctxPreview.drawImage(this, 0, 0, this.width, this.height)
                 }
+                alert("Blending process is completed!")
             })
             break;
         case 'previewImages':
