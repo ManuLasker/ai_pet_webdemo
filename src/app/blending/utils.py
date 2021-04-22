@@ -41,7 +41,7 @@ class EarlyStopping:
         if self.best_score is None:
             self.best_score = score
         # if current loss worsened compare to previous best loss
-        elif self.best_score + self.delta < score:
+        elif self.best_score < score + self.delta:
             self.counter += 1
             self.trace_func(f'EarlyStopping counter: {self.counter} out of {self.patience}')
             if self.counter >= self.patience:
@@ -190,7 +190,7 @@ def execute_blend_process(source_temp: torch.Tensor, mask_temp: torch.Tensor,
         mean_shift = MeanShift().to(device=device)
         
         # define optimizer and loss function
-        optimizer = optim.LBFGS([input_img.requires_grad_()], lr=1.2)
+        optimizer = optim.LBFGS([input_img.requires_grad_()], lr=1.2, max_iter=200)
         mse_loss = nn.MSELoss().to(device=device)
         
         # Algorithms configuration
@@ -200,10 +200,10 @@ def execute_blend_process(source_temp: torch.Tensor, mask_temp: torch.Tensor,
         configurations = {
             'num_step': num_step,
             'alg config': {
-            'w_grad': w_grad,
-            'w_cont': w_cont,
-            'w_tv': w_tv,
-            'w_style': w_style
+                'w_grad': w_grad,
+                'w_cont': w_cont,
+                'w_tv': w_tv,
+                'w_style': w_style
             }
         }
         print(f'Blending algorithms configurations: {pretty_print(configurations)}')
@@ -211,14 +211,8 @@ def execute_blend_process(source_temp: torch.Tensor, mask_temp: torch.Tensor,
         style_layers = vgg16_features.style_layers
         content_layers = vgg16_features.content_layers
         # Initialize Early stop
-        early_stop = EarlyStopping(delta=0.5, verbose=True, trace_func=print)
-        global loss_
-        loss_ = None
+        early_stop = EarlyStopping(delta=0.9, verbose=True, trace_func=print)
         while run[0] < num_step:
-            if loss_:
-                early_stop(loss_)
-            else:
-                loss_ = 0 
             def closure():
                 # global loss
                 global loss_
@@ -262,7 +256,7 @@ def execute_blend_process(source_temp: torch.Tensor, mask_temp: torch.Tensor,
                     "loss_content": loss_content.item(),
                     "loss_source_style": loss_source_style.item(),
                     "loss_tv": loss_tv.item(),
-                    "loss_total": round(loss_total.item(), 2)
+                    "loss_total": loss_total.item()
                 }
                 pbar.set_postfix(**pbar_stats)
                 pbar.update()
@@ -292,9 +286,7 @@ def blend(source: torch.Tensor, mask: torch.Tensor,
     Returns:
         torch.Tensor: blend image
     """
-    mask = mask.unsqueeze(0)
-    mask[mask > 0.4] = 1
-    mask[mask <= 0.4] = 0
+    mask = mask.unsqueeze(0).round()
     source = source.unsqueeze(0)
     target = target.unsqueeze(0)
     return execute_blend_process(source_temp=source, mask_temp=mask,
