@@ -12,7 +12,7 @@ from tqdm import tqdm
 class EarlyStopping:
     """Early stop blending algorithm if loss doesn't improve after a given patience
     """
-    def __init__(self, patience=10, verbose=False, delta=0, trace_func=print) -> None:
+    def __init__(self, patience=4, verbose=False, delta=0, trace_func=print) -> None:
         """[summary]
 
         Args:
@@ -37,7 +37,6 @@ class EarlyStopping:
             loss (torch.Tensor): loss item
         """
         score = loss
-        
         if self.best_score is None:
             self.best_score = score
         # if current loss worsened compare to previous best loss
@@ -190,12 +189,12 @@ def execute_blend_process(source_temp: torch.Tensor, mask_temp: torch.Tensor,
         mean_shift = MeanShift().to(device=device)
         
         # define optimizer and loss function
-        optimizer = optim.LBFGS([input_img.requires_grad_()], lr=1.2, max_iter=200)
+        optimizer = optim.LBFGS([input_img.requires_grad_()], lr=1, max_iter=20)
         mse_loss = nn.MSELoss().to(device=device)
         
         # Algorithms configuration
         run = [0]
-        num_step = 500
+        num_step = 1000
         w_grad, w_cont, w_tv, w_style = 3e4, 3e1, 1e-6, 0.05
         configurations = {
             'num_step': num_step,
@@ -211,7 +210,9 @@ def execute_blend_process(source_temp: torch.Tensor, mask_temp: torch.Tensor,
         style_layers = vgg16_features.style_layers
         content_layers = vgg16_features.content_layers
         # Initialize Early stop
-        early_stop = EarlyStopping(delta=0.9, verbose=True, trace_func=print)
+        early_stop = EarlyStopping(delta=0.5, verbose=True, trace_func=print)
+        global loss_
+        loss_ = np.Inf
         while run[0] < num_step:
             def closure():
                 # global loss
@@ -262,11 +263,13 @@ def execute_blend_process(source_temp: torch.Tensor, mask_temp: torch.Tensor,
                 pbar.update()
                 # Update run
                 run[0] += 1
-                # Save loss for mean
+                # Save last loss
                 loss_ = loss_total.item()
                 return loss_total
             optimizer.step(closure)
+            early_stop(loss_)
             if early_stop.early_stop:
+                print(run[0], "Best loss:", early_stop.best_score)
                 break
         with torch.no_grad():
             result_img = (input_img * mask + target * (1 - mask))
