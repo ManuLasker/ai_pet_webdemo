@@ -9,6 +9,47 @@ from app.blending.models import MeanShift, VGG16_Model
 import app.utils.general as G
 from tqdm import tqdm
 
+class EarlyStopping:
+    """Early stop blending algorithm if loss doesn't improve after a given patience
+    """
+    def __init__(self, patience=10, verbose=False, delta=0, trace_func=print) -> None:
+        """[summary]
+
+        Args:
+            patience (int, optional): How long to wait after las time loss improved. Defaults to 10.
+            verbose (bool, optional): If True, prints a message for each loss improvement. Defaults to False.
+            delta (int, optional): Minimum change in the monitored quantity 
+                                to qualify as an improvement. Defaults to 0.
+            trace_func ([type], optional): trace print function. Defaults to print.
+        """
+        self.patience = patience
+        self.verbose = verbose
+        self.counter = 0
+        self.best_score = None
+        self.early_stop = False
+        self.loss_min = np.Inf
+        self.delta = delta
+        self.trace_func = trace_func
+        
+    def __call__(self, loss: torch.Tensor) -> None:
+        """call earlystoping method
+        Args:
+            loss (torch.Tensor): loss item
+        """
+        score = loss
+        
+        if self.best_score is None:
+            self.best_score = score
+        # if current loss worsened compare to previous best loss
+        elif self.best_score + self.delta < score:
+            self.counter += 1
+            self.trace_func(f'EarlyStopping counter: {self.counter} out of {self.patience}')
+            if self.counter >= self.patience:
+                self.early_stop = True
+        else:
+            self.best_score = score
+            self.counter = 0
+            
 # std and mean configuration
 mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
 def pretty_print(obj):
@@ -169,8 +210,20 @@ def execute_blend_process(source_temp: torch.Tensor, mask_temp: torch.Tensor,
         pbar = tqdm(total=num_step, desc='Blending operation ...', position=0)
         style_layers = vgg16_features.style_layers
         content_layers = vgg16_features.content_layers
-        
+        # Initialize Early stop
+        early_stop = EarlyStopping(verbose=True, trace_func=print)
+        loss_ = None
         while run[0] < num_step:
+            step_ = 0
+            if loss_:
+                loss_ /= step_
+                early_stop(loss_)
+            else:
+                loss_ = 0
+            
+            if early_stop.early_stop:
+                break
+            
             def closure():
                 # zero grad optimizer
                 optimizer.zero_grad()
@@ -218,10 +271,13 @@ def execute_blend_process(source_temp: torch.Tensor, mask_temp: torch.Tensor,
                 pbar.update()
                 # Update run
                 run[0] += 1
+                # Save loss for mean
+                loss_ += loss_total.item()
+                step_ += 1
                 return loss_total
             optimizer.step(closure)
-            with torch.no_grad():
-                result_img = (input_img * mask + target * (1 - mask))
+        with torch.no_grad():
+            result_img = (input_img * mask + target * (1 - mask))
         return result_img.squeeze(0)
 
 def blend(source: torch.Tensor, mask: torch.Tensor,
