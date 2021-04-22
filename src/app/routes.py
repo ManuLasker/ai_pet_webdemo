@@ -7,7 +7,8 @@ from app import app, app_templates, get_redis_db, Redis, logger
 from fastapi.responses import HTMLResponse
 
 @app.get('/', response_class=HTMLResponse)
-def index(request: Request):
+def index(request: Request, db: Redis = Depends(get_redis_db)):
+    db.flushall() # flush all
     return app_templates.TemplateResponse('index.html', {'request': request})
 
 @app.post('/cache_coordinates', description='Save coordinates blending and positioning to redis db')
@@ -90,6 +91,7 @@ def mask_grabcut_square_helper_route(db:Redis = Depends(get_redis_db)):
     # Cache both square mask
     db.set('squareMaskOriginal', json.dumps(mask_b64))
     db.set('squareMaskResized', json.dumps(mask_b64_resized))
+    db.set('previewSquareMaskCut', json.dumps(preview_b64_resized))
     return {'mask_rect': 'data:image/jpeg;base64'+','+mask_b64_resized,
             'preview_cut': 'data:image/jpeg;base64'+','+preview_b64_resized}
     
@@ -150,5 +152,6 @@ def get_blend_image(db: Redis = Depends(get_redis_db)):
 
 @app.get('/get_preview_grabcut', description='get preview image for grabcut')
 def get_preview_image(db: Redis = Depends(get_redis_db)):
-    grabcutb64 = json.loads(db.get('previewPaintMaskCut'))
+    grabcutb64 = json.loads(db.get('previewPaintMaskCut') if db.get('previewPaintMaskCut')
+                            is not None else db.get('previewSquareMaskCut'))
     return {'preview_image': 'data:image/jpeg;base64'+','+grabcutb64}
